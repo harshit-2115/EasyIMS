@@ -1,6 +1,9 @@
 import os
-import pandas as pd
+import requests
+import base64
 import tkinter
+
+import pandas as pd
 from tkinter import ttk
 
 INVENTORY_DATA_PATH = './data/inventory_data.csv'
@@ -86,13 +89,12 @@ def dispatchFunc(product_var, website_var, dr_quantity, message):
             # ADD TO DISPATCH DATA
             df = pd.read_csv(DISPATCH_DATA_PATH)
             row = {'ProductCode': productCode,
-                   'Website': website, 'Quantity':dr_quantity, 'Date': pd.Timestamp.now()}
+                   'Website': website, 'Quantity':drquantity, 'Date': pd.Timestamp.now()}
             df = df.append(row, ignore_index=True)
             df.to_csv(DISPATCH_DATA_PATH, index=False)
             report = r1
-
         else:
-            report = 'Invalid Product Code'
+            report = r1
     
     message['text'] = report
     product_var.set("")
@@ -111,7 +113,7 @@ def newProductFunc(new_product_var, new_product_quantity, message2):
         if productCode in product_codes:
             report = f"{productCode} product already exists."
         else:
-            row = {'ProductCode': productCode, 'Quantity': quantity}
+            row = {'ProductCode': productCode, 'Quantity': quantity, 'Created_Date' : pd.Timestamp.now()}
             inventory_df = inventory_df.append(row, ignore_index=True)
             report = f'{productCode} added. Current Quantity {quantity}'
             inventory_df.to_csv(INVENTORY_DATA_PATH, index=False)
@@ -119,6 +121,90 @@ def newProductFunc(new_product_var, new_product_quantity, message2):
     message2['text'] = report
     new_product_var.set("")
     new_product_quantity.set("")
+
+def getAccessCode():
+    url = "https://api.flipkart.net/oauth-service/oauth/token"
+
+    querystring = {"grant_type": "client_credentials", "scope": "Seller_Api"}
+
+    sample_string = "169b286ab4530b556ab81735a89757ab9a565:3015ddc094d46ffa0eab4e350cb784520"
+    sample_string_bytes = sample_string.encode("ascii")
+    base64_bytes = base64.b64encode(sample_string_bytes)
+    base64_string = base64_bytes.decode("ascii")
+
+    headers = {
+        'Authorization': "Basic " + base64_string 
+    }
+
+    response_json = requests.request("GET", url, headers=headers, params=querystring).json()
+    print(response_json)
+    access_token = response_json["access_token"]
+    print("Your access token is : " + access_token)
+    return access_token
+
+
+def getUpdatedInventory(access_token):
+
+    returnDict = {}
+
+    inventory_df = pd.read_csv(INVENTORY_DATA_PATH)
+    product_codes = list(inventory_df['ProductCode'])
+    product_codes = ','.join(product_codes)
+    
+    headers = {
+    'Authorization': 'Bearer' + access_token
+    }
+
+    url1 = f'https://api.flipkart.net/sellers/listings/v3/{product_codes}'
+
+    response_json = requests.get(url1, headers=headers).json()
+    
+    if('available' in response_json):
+        proddict = response_json['available']
+        products = list(proddict.keys())
+        for i in products:
+            PID = proddict[i]['product_id']
+            LID = proddict[i]['locations'][0]['id']
+            up_quantity = int(inventory_df.loc[inventory_df['ProductCode'] == i, 'Quantity'])
+            loc_dict = [{
+                'id' : LID,
+                'inventory' : up_quantity
+            }]
+
+            p_dict = {
+                'product_id' : PID,
+                'locations' : loc_dict
+            }
+
+            returnDict[i] = p_dict
+    else:
+        return 'None'
+    print('/n', returnDict)
+    return returnDict
+
+
+    
+
+
+
+
+def updateFlipkart(message2):
+    report = ""
+    accessCode = getAccessCode()
+    data = getUpdatedInventory(accessCode)
+    if(data == 'None'):
+        report = 'No Matching Product Found'
+    else :
+        headers = {
+        'Authorization': 'Bearer' + accessCode,
+        'Content-Type': 'application/json'
+            }
+        url1 = 'https://api.flipkart.net/sellers/listings/v3/update/inventory'
+        response_json = requests.request("POST", url1, headers=headers, json=data).json()
+        print(response_json)
+        report = 'Successfully Updated'
+
+    message2['text'] = report 
 
 def createGUI():
     
@@ -192,6 +278,10 @@ def createGUI():
 
     newProductButton = tkinter.Button(
         frame, text="Add Product", command=lambda : newProductFunc(new_product_var, new_product_quantity, message2)).place(relx=0.75, rely=0.65)
+
+
+    updateFlipkartBtn = tkinter.Button(
+        frame, text="Update on Flipkart", command=lambda :updateFlipkart(message2)).place(relx=0.33, rely=0.9)
 
     root.mainloop()
 
