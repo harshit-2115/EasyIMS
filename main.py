@@ -18,7 +18,7 @@ def checkDB():
         #Temp_Data
         data = {'ProductCode' : ['PD123'], 'Quantity' : [5], 'Created_Date' : pd.Timestamp.now()}
         row = {'ProductCode': ['PD123'],
-                   'Website': ['Meesho'], 'Date': pd.Timestamp.now()}
+                   'Website': ['Meesho'], 'Quantity':[5] ,'Date': pd.Timestamp.now()}
 
         inventory_df = pd.DataFrame(data)   
         dispatch_df = pd.DataFrame(row)   
@@ -28,7 +28,7 @@ def checkDB():
             inventory_df.to_csv(INVENTORY_DATA_PATH, index=False)
             dispatch_df.to_csv(DISPATCH_DATA_PATH, index=False)
 
-def changeInventoryQuantity(productCode, actionStr):
+def changeInventoryQuantity(productCode, drquantity, actionStr):
 
     report = ""
 
@@ -41,9 +41,10 @@ def changeInventoryQuantity(productCode, actionStr):
         quantity = int(quantity)
 
         if(actionStr == 'return'):
-            quantity += 1
+            quantity += drquantity
         else:
-            quantity -= 1
+            quantity -= drquantity
+            if(quantity < 0): return 'Error : Dispatch Order > Item Stock'
         
         inventory_df.loc[inventory_df['ProductCode']
                             == productCode, 'Quantity'] = quantity
@@ -55,33 +56,37 @@ def changeInventoryQuantity(productCode, actionStr):
 
     return report
 
-def returnFunc(product_var, message):
+def returnFunc(product_var, dr_quantity, message):
     productCode = product_var.get()
+    drquantity = int(dr_quantity.get())
 
     report = ""
     if(productCode == ""):
         report = "Enter Product Code"
     else:
-        report = changeInventoryQuantity(productCode, 'return')
+        report = changeInventoryQuantity(productCode, drquantity, 'return')
         
     message['text'] = report
     product_var.set("")
+    dr_quantity.set("")
 
-def dispatchFunc(product_var, website_var, message):
+
+def dispatchFunc(product_var, website_var, dr_quantity, message):
     productCode = product_var.get()
     website = website_var.get()
-    
+    drquantity = int(dr_quantity.get())
+
     report = ""
 
-    if(productCode == "" or website == ""):
-        report = "Enter Both Fields"
+    if(productCode == "" or website == "" or drquantity == " "):
+        report = "Enter All Fields"
     else:
-        r1 = changeInventoryQuantity(productCode, 'dispatch')
-        if(r1 != 'Invalid Product Code'):
+        r1 = changeInventoryQuantity(productCode, drquantity, 'dispatch')
+        if(r1 != 'Invalid Product Code' and r1 != 'Error : Dispatch Order > Item Stock'):
             # ADD TO DISPATCH DATA
             df = pd.read_csv(DISPATCH_DATA_PATH)
             row = {'ProductCode': productCode,
-                   'Website': website, 'Date': pd.Timestamp.now()}
+                   'Website': website, 'Quantity':dr_quantity, 'Date': pd.Timestamp.now()}
             df = df.append(row, ignore_index=True)
             df.to_csv(DISPATCH_DATA_PATH, index=False)
             report = r1
@@ -91,6 +96,7 @@ def dispatchFunc(product_var, website_var, message):
     
     message['text'] = report
     product_var.set("")
+    dr_quantity.set("")
 
 def newProductFunc(new_product_var, new_product_quantity, message2):
     report = ""
@@ -118,15 +124,17 @@ def createGUI():
     
     # ROOT and Variables
     root = tkinter.Tk()
+    root.title("EasyIMS")
 
     product_var = tkinter.StringVar()
     new_product_var = tkinter.StringVar()
     new_product_quantity = tkinter.StringVar()
     website_var = tkinter.StringVar()
+    dr_quantity = tkinter.StringVar()
     
     #Canvas/Background
-    canvas = tkinter.Canvas(root, height=600, width=600, bg="white")
-    canvas.pack()
+    canvas = tkinter.Canvas(root, height=600, width=600,bg="white")
+    canvas.grid(column=3)
 
     # Form Frame
     frame = tkinter.Frame(root, bg="#263D42")
@@ -149,15 +157,21 @@ def createGUI():
     websiteDD.place(x=125, rely=0.1)
     websiteDD.current()
 
+    dispatchQuantity = tkinter.Label(
+        frame, text="Quantity", bg="white", padx=5, pady=5, justify="left").place(x=10, rely=0.18)
+    dispatchQuantity = tkinter.Entry(frame, width=30,  font=(
+        'calibre', 15, 'normal'), textvariable=dr_quantity).place(x=125, rely=0.18)
+
+
     message = tkinter.Label(frame, width=40, text="Message",  font=(
     'calibre', 15, 'normal'), bg="white")
-    message.place(relx=0.08, rely=0.3)
+    message.place(relx=0.08, rely=0.35)
 
     dispatchButton = tkinter.Button(
-    frame, text="Dispatched", command= lambda : dispatchFunc(product_var, website_var, message)).place(relx=0.58, rely=0.2)
+    frame, text="Dispatched", command= lambda : dispatchFunc(product_var, website_var, dr_quantity, message)).place(relx=0.58, rely=0.27)
 
     returnButton = tkinter.Button(
-    frame, text="Returned", command=lambda : returnFunc(product_var, message)).place(relx=0.8, rely=0.2)
+    frame, text="Returned", command=lambda : returnFunc(product_var, dr_quantity, message)).place(relx=0.8, rely=0.27)
 
     # Lower Form
     newProductCode = tkinter.Label(
