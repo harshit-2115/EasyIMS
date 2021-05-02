@@ -127,7 +127,7 @@ def getAccessCode():
 
     querystring = {"grant_type": "client_credentials", "scope": "Seller_Api"}
 
-    sample_string = "169b286ab4530b556ab81735a89757ab9a565:3015ddc094d46ffa0eab4e350cb784520"
+    sample_string = ""
     sample_string_bytes = sample_string.encode("ascii")
     base64_bytes = base64.b64encode(sample_string_bytes)
     base64_string = base64_bytes.decode("ascii")
